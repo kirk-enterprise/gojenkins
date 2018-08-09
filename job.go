@@ -327,7 +327,7 @@ func (j *Job) Create(config string, qr ...interface{}) (*Job, error) {
 	if len(qr) > 0 {
 		querystring = qr[0].(map[string]string)
 	}
-	resp, err := j.Jenkins.Requester.PostXML(j.parentBase()+"/createItem", config, j.Raw, querystring)
+	resp, err := j.Jenkins.Requester.PostXML(j.parentBase()+"/createItem", config, nil, querystring)
 	if err != nil {
 		return nil, err
 	}
