@@ -1,17 +1,3 @@
-// Copyright 2015 Vadim Kravcenko
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package gojenkins
 
 import (
@@ -34,6 +20,17 @@ type Job struct {
 type JobBuild struct {
 	Number int64
 	URL    string
+}
+
+type JobBuildInfo struct {
+	Duration        int64  `json:"duration"`
+	FullDisplayName string `json:"fullDisplayName"`
+	ID              string `json:"id"`
+	Number          int64  `json:"number"`
+	Result          string `json:"result"`
+	Timestamp       int64  `json:"timestamp"`
+	URL             string `json:"url"`
+	ConsoleOutput   string `json:"consoleOutput"`
 }
 
 type InnerJob struct {
@@ -69,18 +66,18 @@ type JobResponse struct {
 		IconUrl       string `json:"iconUrl"`
 		Score         int64  `json:"score"`
 	} `json:"healthReport"`
-	InQueue               bool     `json:"inQueue"`
-	KeepDependencies      bool     `json:"keepDependencies"`
-	LastBuild             JobBuild `json:"lastBuild"`
-	LastCompletedBuild    JobBuild `json:"lastCompletedBuild"`
-	LastFailedBuild       JobBuild `json:"lastFailedBuild"`
-	LastStableBuild       JobBuild `json:"lastStableBuild"`
-	LastSuccessfulBuild   JobBuild `json:"lastSuccessfulBuild"`
-	LastUnstableBuild     JobBuild `json:"lastUnstableBuild"`
-	LastUnsuccessfulBuild JobBuild `json:"lastUnsuccessfulBuild"`
-	Name                  string   `json:"name"`
-	SubJobs               []InnerJob    `json:"jobs"`
-	NextBuildNumber       int64    `json:"nextBuildNumber"`
+	InQueue               bool       `json:"inQueue"`
+	KeepDependencies      bool       `json:"keepDependencies"`
+	LastBuild             JobBuild   `json:"lastBuild"`
+	LastCompletedBuild    JobBuild   `json:"lastCompletedBuild"`
+	LastFailedBuild       JobBuild   `json:"lastFailedBuild"`
+	LastStableBuild       JobBuild   `json:"lastStableBuild"`
+	LastSuccessfulBuild   JobBuild   `json:"lastSuccessfulBuild"`
+	LastUnstableBuild     JobBuild   `json:"lastUnstableBuild"`
+	LastUnsuccessfulBuild JobBuild   `json:"lastUnsuccessfulBuild"`
+	Name                  string     `json:"name"`
+	SubJobs               []InnerJob `json:"jobs"`
+	NextBuildNumber       int64      `json:"nextBuildNumber"`
 	Property              []struct {
 		ParameterDefinitions []ParameterDefinition `json:"parameterDefinitions"`
 	} `json:"property"`
@@ -116,7 +113,7 @@ func (j *Job) GetDetails() *JobResponse {
 }
 
 func (j *Job) GetBuild(id int64) (*Build, error) {
-	build := Build{Jenkins: j.Jenkins, Job: j, Raw: new(BuildResponse), Depth: 1, Base: "/job/" + j.GetName() + "/" + strconv.FormatInt(id, 10)}
+	build := Build{Jenkins: j.Jenkins, Job: j, Raw: new(BuildResponse), Depth: 1, Base: j.Base + "/" + strconv.FormatInt(id, 10)}
 	status, err := build.Poll()
 	if err != nil {
 		return nil, err
@@ -188,6 +185,18 @@ func (j *Job) GetAllBuildIds() ([]JobBuild, error) {
 		Builds []JobBuild `json:"allBuilds"`
 	}
 	_, err := j.Jenkins.Requester.GetJSON(j.Base, &buildsResp, map[string]string{"tree": "allBuilds[number,url]"})
+	if err != nil {
+		return nil, err
+	}
+	return buildsResp.Builds, nil
+}
+
+// Returns All Builds
+func (j *Job) GetAllBuildInfos() ([]JobBuildInfo, error) {
+	var buildsResp struct {
+		Builds []JobBuildInfo `json:"allBuilds"`
+	}
+	_, err := j.Jenkins.Requester.GetJSON(j.Base, &buildsResp, map[string]string{"tree": "allBuilds[fullDisplayName,id,url,number,timestamp,duration,result]"})
 	if err != nil {
 		return nil, err
 	}
@@ -523,4 +532,15 @@ func (j *Job) History() ([]*History, error) {
 		return nil, err
 	}
 	return parseBuildHistory(resp.Body), nil
+}
+
+func (j *Job) GetBuildConsoleOutputWithTimestamp(buildNumber int64) string {
+	url := j.Base + fmt.Sprintf("/%d/timestamps", buildNumber)
+	queryMap := map[string]string{
+		"time":      "HH:mm:ss.S",
+		"appendLog": "",
+	}
+	var content string
+	j.Jenkins.Requester.GetXML(url, &content, queryMap)
+	return content
 }

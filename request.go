@@ -1,17 +1,3 @@
-// Copyright 2015 Vadim Kravcenko
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package gojenkins
 
 import (
@@ -61,7 +47,7 @@ type Requester struct {
 
 func (r *Requester) SetCrumb(ar *APIRequest) error {
 	crumbData := map[string]string{}
-	response, _ := r.GetJSON("/crumbIssuer/api/json", &crumbData, nil)
+	response, _ := r.GetJSON("/crumbIssuer", &crumbData, nil)
 
 	if response.StatusCode == 200 && crumbData["crumbRequestField"] != "" {
 		ar.SetHeader(crumbData["crumbRequestField"], crumbData["crumb"])
@@ -77,7 +63,7 @@ func (r *Requester) PostJSON(endpoint string, payload io.Reader, responseStruct 
 	}
 	ar.SetHeader("Content-Type", "application/x-www-form-urlencoded")
 	ar.Suffix = "api/json"
-	return r.Do(ar, &responseStruct, querystring)
+	return r.Do(ar, responseStruct, querystring)
 }
 
 func (r *Requester) Post(endpoint string, payload io.Reader, responseStruct interface{}, querystring map[string]string) (*http.Response, error) {
@@ -87,7 +73,7 @@ func (r *Requester) Post(endpoint string, payload io.Reader, responseStruct inte
 	}
 	ar.SetHeader("Content-Type", "application/x-www-form-urlencoded")
 	ar.Suffix = ""
-	return r.Do(ar, &responseStruct, querystring)
+	return r.Do(ar, responseStruct, querystring)
 }
 
 func (r *Requester) PostFiles(endpoint string, payload io.Reader, responseStruct interface{}, querystring map[string]string, files []string) (*http.Response, error) {
@@ -95,7 +81,7 @@ func (r *Requester) PostFiles(endpoint string, payload io.Reader, responseStruct
 	if err := r.SetCrumb(ar); err != nil {
 		return nil, err
 	}
-	return r.Do(ar, &responseStruct, querystring, files)
+	return r.Do(ar, responseStruct, querystring, files)
 }
 
 func (r *Requester) PostXML(endpoint string, xml string, responseStruct interface{}, querystring map[string]string) (*http.Response, error) {
@@ -106,14 +92,14 @@ func (r *Requester) PostXML(endpoint string, xml string, responseStruct interfac
 	}
 	ar.SetHeader("Content-Type", "application/xml")
 	ar.Suffix = ""
-	return r.Do(ar, &responseStruct, querystring)
+	return r.Do(ar, responseStruct, querystring)
 }
 
 func (r *Requester) GetJSON(endpoint string, responseStruct interface{}, query map[string]string) (*http.Response, error) {
 	ar := NewAPIRequest("GET", endpoint, nil)
 	ar.SetHeader("Content-Type", "application/json")
 	ar.Suffix = "api/json"
-	return r.Do(ar, &responseStruct, query)
+	return r.Do(ar, responseStruct, query)
 }
 
 func (r *Requester) GetXML(endpoint string, responseStruct interface{}, query map[string]string) (*http.Response, error) {
@@ -226,40 +212,51 @@ func (r *Requester) Do(ar *APIRequest, responseStruct interface{}, options ...in
 	if response, err := r.Client.Do(req); err != nil {
 		return nil, err
 	} else {
+		defer response.Body.Close()
+
 		errorText := response.Header.Get("X-Error")
 		if errorText != "" {
+			fmt.Printf("X-Error: %s %+v\n", errorText, *ar)
 			return nil, errors.New(errorText)
 		}
-		switch responseStruct.(type) {
-		case *string:
-			return r.ReadRawResponse(response, responseStruct)
-		default:
-			return r.ReadJSONResponse(response, responseStruct)
+
+		content, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			fmt.Println("ioutil.ReadAll:", err)
+			return nil, err
 		}
 
-	}
+		if response.StatusCode != 200 {
+			fmt.Println(string(content))
+			return nil, fmt.Errorf("response status code is not 200: %d", response.StatusCode)
+		}
 
+		switch responseStruct.(type) {
+		case *string:
+			fmt.Println("responseStruct.(type) is *string")
+			err = r.processStrContent(content, responseStruct)
+		default:
+			fmt.Println("responseStruct.(type) is json")
+			err = r.processJSONContent(content, responseStruct)
+		}
+		return response, err
+	}
 }
 
-func (r *Requester) ReadRawResponse(response *http.Response, responseStruct interface{}) (*http.Response, error) {
-	defer response.Body.Close()
-
-	content, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
+func (r *Requester) processStrContent(content []byte, responseStruct interface{}) error {
 	if str, ok := responseStruct.(*string); ok {
 		*str = string(content)
 	} else {
-		return nil, fmt.Errorf("Could not cast responseStruct to *string")
+		return fmt.Errorf("Could not cast responseStruct to *string")
 	}
 
-	return response, nil
+	return nil
 }
 
-func (r *Requester) ReadJSONResponse(response *http.Response, responseStruct interface{}) (*http.Response, error) {
-	defer response.Body.Close()
-
-	json.NewDecoder(response.Body).Decode(responseStruct)
-	return response, nil
+func (r *Requester) processJSONContent(content []byte, responseStruct interface{}) error {
+	err := json.Unmarshal(content, responseStruct)
+	if err != nil {
+		fmt.Println(string(content))
+	}
+	return err
 }

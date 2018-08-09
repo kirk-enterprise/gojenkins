@@ -1,18 +1,3 @@
-// Copyright 2015 Vadim Kravcenko
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
-// Gojenkins is a Jenkins Client in Go, that exposes the jenkins REST api in a more developer friendly way.
 package gojenkins
 
 import (
@@ -512,6 +497,21 @@ func (j *Jenkins) Poll() (int, error) {
 		return 0, err
 	}
 	return resp.StatusCode, nil
+}
+
+func (j *Jenkins) CreateCredentials(credentialData string) error {
+	credObject := Credentials{Jenkins: j, Base: "/credentials/store/system/domain/_/"}
+	return credObject.Create(credentialData)
+}
+
+func (j *Jenkins) RemoveCredentials(credentialsID string) error {
+	credObject := Credentials{Jenkins: j, Base: "/credentials/store/system/domain/_/"}
+	return credObject.Remove(credentialsID)
+}
+
+func (j *Jenkins) GetAllCredentials() ([]UserCredential, error) {
+	credObject := Credentials{Jenkins: j, Raw: new(CredentialsResponse), Base: "/credentials/store/system/domain/_/"}
+	return credObject.GetAll()
 }
 
 // Creates a new Jenkins Instance
