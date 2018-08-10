@@ -228,7 +228,7 @@ func (r *Requester) Do(ar *APIRequest, responseStruct interface{}, options ...in
 
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			fmt.Println(string(content))
-			return nil, fmt.Errorf("response status code is not 200: %d", response.StatusCode)
+			return nil, fmt.Errorf("response status code is not 2XX: %d", response.StatusCode)
 		}
 
 		// responseStruct为nil表示忽略响应内容，一般情况下，这是因为响应为html页面，对于api来说，无需处理，所以直接返回即可
